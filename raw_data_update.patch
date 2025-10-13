@@ -1,0 +1,33 @@
+# Replace the blocking code with a warning system that allows but limits raw_data queries
+
+# Safety check for large columns - now with 1M context we can handle some, but warn
+sql_lower = sql.lower()
+
+# Warn about raw_data but allow with strict LIMIT
+if 'raw_data' in sql_lower or 'error_details' in sql_lower:
+    # Check if LIMIT is present
+    if 'limit' not in sql_lower:
+        return {
+            "success": False,
+            "error": "Query must include LIMIT clause when selecting raw_data or error_details (max LIMIT 5 recommended). These columns contain large JSON. With 1M context window enabled, small queries are allowed."
+        }
+    
+    # Check if LIMIT is reasonable (extract number)
+    import re
+    limit_match = re.search(r'limit\s+(\d+)', sql_lower)
+    if limit_match:
+        limit_value = int(limit_match.group(1))
+        if limit_value > 10:
+            return {
+                "success": False, 
+                "error": f"LIMIT {limit_value} too high for raw_data queries. Maximum LIMIT 10 recommended to avoid context overflow even with 1M window."
+            }
+    
+    print(f"⚠️  WARNING: Query includes large JSON columns. 1M context enabled, but query may still be large.")
+
+# Block SELECT * entirely - too dangerous
+if 'select *' in sql_lower:
+    return {
+        "success": False,
+        "error": "SELECT * not allowed. Always specify explicit column names to control response size."
+    }

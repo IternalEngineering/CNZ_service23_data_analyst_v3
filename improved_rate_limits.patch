@@ -1,0 +1,15 @@
+# Improved Rate Limit Configuration
+
+## Current Configuration (lines 168-169):
+max_retries = 3
+wait_time = (2 ** retry) * 2  # 2s, 4s, 8s (total: 14s)
+
+## Proposed Configuration:
+max_retries = 5
+wait_time = (2 ** retry) * 3  # 3s, 6s, 12s, 24s, 48s (total: 93s)
+
+## Rationale:
+- More retries (5 instead of 3) for transient rate limit issues
+- Longer backoff multiplier (3x instead of 2x) to give API time to reset
+- Total wait time increases from 14s to 93s before giving up
+- This should handle most rate limit scenarios

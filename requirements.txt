@@ -1,0 +1,24 @@
+# FastAPI and web framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+
+# CORS
+python-dotenv==1.0.1
+
+# Pydantic for data validation
+pydantic==2.9.0
+
+# Database
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# AI and ML
+anthropic==0.34.2
+openai==1.45.0
+
+# MindsDB (optional)
+mindsdb-sdk==2.0.0
+
+# Logging and utilities
+python-decouple==3.8
