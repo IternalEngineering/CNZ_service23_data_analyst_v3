@@ -134,19 +134,21 @@ class PostgresDirectTool:
 
 
 def get_postgres_direct_tool_definition():
-    """Get tool definition for Claude SDK"""
+    """Get tool definition for OpenAI/LiteLLM SDK"""
     return {
-        "name": "query_postgres_direct",
-        "description": """Query PostgreSQL database directly (bypasses MindsDB API).
+        "type": "function",
+        "function": {
+            "name": "query_postgres_direct",
+            "description": """Query PostgreSQL database directly (bypasses MindsDB API).
         Use this for:
         - Accessing raw_data column (large GeoJSON)
         - Complex queries that need full PostgreSQL features
         - When MindsDB API times out or has context limits
-        
+
         Always include LIMIT clause to avoid overwhelming responses.""",
-        "input_schema": {
-            "type": "object",
-            "properties": {
+            "parameters": {
+                "type": "object",
+                "properties": {
                 "operation": {
                     "type": "string",
                     "enum": ["custom_query", "zebra_crossings"],
@@ -163,6 +165,7 @@ def get_postgres_direct_tool_definition():
                 }
             },
             "required": ["operation"]
+            }
         }
     }
 

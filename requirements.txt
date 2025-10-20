@@ -14,7 +14,7 @@ asyncpg==0.29.0
 psycopg2-binary==2.9.9
 
 # AI and ML
-anthropic==0.34.2
+litellm==1.49.3
 openai==1.45.0
 
 # MindsDB (optional)

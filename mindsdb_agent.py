@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """
 MindsDB Data Analyst Agent
-Claude SDK agent that can query SERVICE19 onboarding data via MindsDB
+OpenRouter-powered agent that can query SERVICE19 onboarding data via MindsDB
+Uses LiteLLM for unified model access across providers
 """
 import os
 import sys
@@ -15,13 +16,16 @@ from dotenv import load_dotenv
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 
-# Import Anthropic SDK
+# Import unified OpenRouter client
+sys.path.append(str(Path(__file__).parent.parent))
+from openrouter_config import get_llm_client
+
+# Import LiteLLM for OpenRouter access
 try:
-    from anthropic import Anthropic, RateLimitError
-    from anthropic.types import TextBlock, ToolUseBlock
+    from litellm import completion
 except ImportError:
-    print("ERROR: anthropic package not installed")
-    print("Run: pip install anthropic")
+    print("ERROR: litellm package not installed")
+    print("Run: pip install litellm")
     sys.exit(1)
 
 # Import MindsDB tool
@@ -39,15 +43,15 @@ from export_tool import execute_export_tool, get_export_tool_definition
 
 
 class MindsDBAgent:
-    """Claude SDK agent with MindsDB tool access"""
+    """OpenRouter-powered agent with MindsDB tool access via LiteLLM"""
 
     def __init__(self, create_alerts: bool = False):
-        api_key = os.getenv('ANTHROPIC_API_KEY')
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in environment")
+        # Initialize unified LLM client for data analysis via OpenRouter
+        self.client = get_llm_client(task_type="analysis", temperature=0.7, max_tokens=4096)
+        self.model = self.client.model
 
-        self.client = Anthropic(api_key=api_key)
-        self.model = "claude-sonnet-4-5-20250929"
+        print(f"\n[*] Using model: {self.model}")
+        print(f"[*] Estimated cost: ${self.client.estimated_cost}/1M tokens\n")
 
         # Tool definitions
         self.mindsdb_tool = get_mindsdb_tool_definition()
@@ -166,57 +170,68 @@ When analyzing data, provide clear insights and actionable recommendations."""
         print(f"{'='*60}\n")
 
         while True:
-            # Call Claude with tools (with rate limit retry)
+            # Call LLM with tools via OpenRouter (with rate limit retry)
             max_retries = 5
             for retry in range(max_retries):
                 try:
-                    response = self.client.messages.create(
+                    response = completion(
                         model=self.model,
-                        max_tokens=4096,
-                        system=self.system_prompt,
+                        messages=[{"role": "system", "content": self.system_prompt}] + messages,
                         tools=self.tools,
-                        messages=messages,
+                        max_tokens=4096,
+                        temperature=0.7,
+                        drop_params=True  # Drop unsupported params for OpenRouter
                     )
                     break  # Success, exit retry loop
 
-                except RateLimitError as e:
-                    if retry < max_retries - 1:
-                        wait_time = (2 ** retry) * 3  # Exponential backoff: 3s, 6s, 12s, 24s, 48s
-                        print(f"\n[WARNING] Rate limit hit. Waiting {wait_time}s before retry {retry + 1}/{max_retries}...")
-                        time.sleep(wait_time)
+                except Exception as e:
+                    # Handle rate limits and other API errors
+                    if 'rate' in str(e).lower() or 'limit' in str(e).lower():
+                        if retry < max_retries - 1:
+                            wait_time = (2 ** retry) * 3  # Exponential backoff: 3s, 6s, 12s, 24s, 48s
+                            print(f"\n[WARNING] Rate limit hit. Waiting {wait_time}s before retry {retry + 1}/{max_retries}...")
+                            time.sleep(wait_time)
+                        else:
+                            print(f"\n[ERROR] Rate limit exceeded after {max_retries} retries")
+                            raise e
                     else:
-                        print(f"\n❌ Rate limit exceeded after {max_retries} retries")
+                        # Re-raise non-rate-limit errors immediately
                         raise e
 
-            print(f"Stop reason: {response.stop_reason}")
+            # Get the response message
+            response_message = response.choices[0].message
+            finish_reason = response.choices[0].finish_reason
 
-            # Check if Claude wants to use a tool
-            if response.stop_reason == "tool_use":
-                # Extract tool uses and text
-                tool_uses = []
-                assistant_text = []
+            print(f"Finish reason: {finish_reason}")
 
-                for block in response.content:
-                    if isinstance(block, ToolUseBlock):
-                        tool_uses.append(block)
-                    elif isinstance(block, TextBlock):
-                        assistant_text.append(block.text)
+            # Check if LLM wants to use a tool
+            if finish_reason == "tool_calls" and response_message.tool_calls:
+                # Extract tool calls and text
+                tool_calls = response_message.tool_calls
+                assistant_text = response_message.content or ""
 
                 # Print assistant's thinking
                 if assistant_text:
-                    print(f"Assistant: {' '.join(assistant_text)}\n")
+                    print(f"Assistant: {assistant_text}\n")
 
                 # Execute tools
                 tool_results = []
-                for tool_use in tool_uses:
-                    print(f"Using tool: {tool_use.name}")
-                    print(f"Parameters: {tool_use.input}")
+                for tool_call in tool_calls:
+                    print(f"Using tool: {tool_call.function.name}")
+                    print(f"Parameters: {tool_call.function.arguments}")
+
+                    # Parse arguments (LiteLLM returns JSON string)
+                    import json
+                    if isinstance(tool_call.function.arguments, str):
+                        arguments = json.loads(tool_call.function.arguments)
+                    else:
+                        arguments = tool_call.function.arguments
 
                     # Execute appropriate tool
-                    if tool_use.name == "query_mindsdb":
-                        result = await execute_mindsdb_tool(**tool_use.input)
-                    elif tool_use.name == "query_postgres_direct":
-                        result = await execute_postgres_direct_tool(**tool_use.input)
+                    if tool_call.function.name == "query_mindsdb":
+                        result = await execute_mindsdb_tool(**arguments)
+                    elif tool_call.function.name == "query_postgres_direct":
+                        result = await execute_postgres_direct_tool(**arguments)
                         print(f"Direct PostgreSQL Result: {result.get('success', False)}")
                         if result.get('row_count'):
                             print(f"Rows: {result['row_count']}")
@@ -250,31 +265,42 @@ When analyzing data, provide clear insights and actionable recommendations."""
                             }
                             result_str = str(result_summary)
 
-                    elif tool_use.name == "export_query_results":
-                        result = await execute_export_tool(**tool_use.input)
+                    elif tool_call.function.name == "export_query_results":
+                        result = await execute_export_tool(**arguments)
                         print(f"Export result: {result.get('success', False)}")
                         if result.get('row_count'):
                             print(f"Exported {result['row_count']} rows to {result.get('filepath')}")
                         result_str = str(result)
 
                     else:
-                        result_str = str({"error": f"Unknown tool: {tool_use.name}"})
+                        result_str = str({"error": f"Unknown tool: {tool_call.function.name}"})
 
                     tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": tool_call.function.name,
                         "content": result_str
                     })
 
-                # Add assistant message and tool results to conversation
+                # Add assistant message with tool calls to conversation
                 messages.append({
                     "role": "assistant",
-                    "content": response.content
+                    "content": assistant_text,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments
+                            }
+                        }
+                        for tc in tool_calls
+                    ]
                 })
-                messages.append({
-                    "role": "user",
-                    "content": tool_results
-                })
+
+                # Add tool results
+                messages.extend(tool_results)
 
                 # Prune conversation to prevent context bloat
                 # Keep pairs together: assistant (tool_use) + user (tool_result)
@@ -297,12 +323,7 @@ When analyzing data, provide clear insights and actionable recommendations."""
 
             else:
                 # Final response without tool use
-                final_text = []
-                for block in response.content:
-                    if isinstance(block, TextBlock):
-                        final_text.append(block.text)
-
-                final_response = "\n".join(final_text)
+                final_response = response_message.content or ""
                 print(f"{'='*60}")
                 print(f"Assistant: {final_response}")
                 print(f"{'='*60}\n")

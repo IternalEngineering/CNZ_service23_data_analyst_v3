@@ -204,10 +204,12 @@ class MindsDBTool:
 
 # Tool definition for Claude SDK
 def get_mindsdb_tool_definition():
-    """Get tool definition for Claude SDK"""
+    """Get tool definition for OpenAI/LiteLLM SDK"""
     return {
-        "name": "query_mindsdb",
-        "description": """Query SERVICE19 onboarding data from MindsDB.
+        "type": "function",
+        "function": {
+            "name": "query_mindsdb",
+            "description": """Query SERVICE19 onboarding data from MindsDB.
         This table contains city data collection results including URLs, fetch status, file types, and content.
         Use this to analyze data sources, check fetch success rates, explore available datasets, and debug data collection issues.
 
@@ -221,9 +223,9 @@ def get_mindsdb_tool_definition():
         - Execute custom SQL (including ALTER TABLE, INSERT, UPDATE)
         - Modify database schema (use with caution)
         """,
-        "input_schema": {
-            "type": "object",
-            "properties": {
+            "parameters": {
+                "type": "object",
+                "properties": {
                 "operation": {
                     "type": "string",
                     "enum": [
@@ -263,6 +265,7 @@ def get_mindsdb_tool_definition():
                 }
             },
             "required": ["operation"]
+            }
         }
     }
 

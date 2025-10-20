@@ -130,14 +130,16 @@ class ExportTool:
 
 def get_export_tool_definition() -> Dict[str, Any]:
     """
-    Get tool definition for Claude SDK
+    Get tool definition for OpenAI/LiteLLM SDK
 
     Returns:
         Tool definition dict
     """
     return {
-        "name": "export_query_results",
-        "description": """Export large query results to a file instead of returning them to the conversation.
+        "type": "function",
+        "function": {
+            "name": "export_query_results",
+            "description": """Export large query results to a file instead of returning them to the conversation.
 
 Use this tool when:
 - Query returns more than 50 rows
@@ -145,15 +147,13 @@ Use this tool when:
 - You want to save results for later analysis
 
 The tool will save results as CSV or JSON and return only a summary.""",
-        "input_schema": {
-            "type": "object",
-            "properties": {
+            "parameters": {
+                "type": "object",
+                "properties": {
                 "data": {
                     "type": "array",
-                    "description": "Query result data (array of arrays)",
-                    "items": {
-                        "type": "array"
-                    }
+                    "description": "Query result data (array of rows)",
+                    "items": {}
                 },
                 "columns": {
                     "type": "array",
@@ -173,6 +173,7 @@ The tool will save results as CSV or JSON and return only a summary.""",
                 }
             },
             "required": ["data", "columns", "format"]
+            }
         }
     }
 
