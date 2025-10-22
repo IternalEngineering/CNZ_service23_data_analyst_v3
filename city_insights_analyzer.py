@@ -42,6 +42,12 @@ except ImportError:
     print("Run: pip install anthropic")
     sys.exit(1)
 
+# Import OpenTelemetry for Arize agent graphs
+from opentelemetry import trace
+
+# Get OpenTelemetry tracer for Arize agent graphs
+tracer = trace.get_tracer(__name__)
+
 
 class CityInsightsAnalyzer:
     """Analyzer that uses Claude to generate insights from disparate data sources"""
@@ -148,6 +154,20 @@ class CityInsightsAnalyzer:
         Returns:
             Dict containing insight data and metadata
         """
+        # Create agent span for Arize agent graph visualization
+        span = tracer.start_span(
+            name="City Insights Analyzer Agent",
+            attributes={
+                "graph.node.id": "city_insights_analyzer",
+                "graph.node.parent_id": "service23_data_analysis",
+                "agent.role": "data_analyst",
+                "agent.task": "analyze_city_data_for_insights",
+                "city": city,
+                "country_code": country_code,
+                "model": "claude-3-5-sonnet-20241022"
+            }
+        )
+
         print(f"\n{'='*60}")
         print(f"Analyzing: {city}, {country_code}")
         print(f"{'='*60}\n")
@@ -278,6 +298,11 @@ Remember: Use LIMIT in ALL queries. Query at most 5 times total."""
                     print(f"  Context overflow detected, pruning more aggressively...")
                     messages = messages[-2:]  # Keep only last exchange
                     continue
+                # Unhandled exception - record error and re-raise
+                span.set_attribute("agent.status", "error")
+                span.set_attribute("error.type", type(e).__name__)
+                span.set_attribute("error.message", str(e))
+                span.end()
                 raise
 
             # Check stop reason
@@ -347,6 +372,10 @@ Remember: Use LIMIT in ALL queries. Query at most 5 times total."""
                         "recommendations": []
                     }
 
+                span.set_attribute("agent.status", "success")
+                span.set_attribute("insight_confidence", insight_data.get("confidence_score", 0.5))
+                span.end()
+
                 return {
                     "success": True,
                     "city": city,
@@ -356,6 +385,10 @@ Remember: Use LIMIT in ALL queries. Query at most 5 times total."""
                 }
 
         # Max iterations reached
+        span.set_attribute("agent.status", "error")
+        span.set_attribute("error.message", "Max iterations reached")
+        span.end()
+
         return {
             "success": False,
             "error": "Max iterations reached without completion",

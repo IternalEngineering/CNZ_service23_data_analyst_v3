@@ -50,6 +50,31 @@ app.add_middleware(
 )
 
 
+# Initialize Arize telemetry on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize Arize telemetry"""
+    try:
+        from arize_telemetry import initialize_telemetry
+        if initialize_telemetry(project_name="Service23-DataAnalyst"):
+            print("[OK] Arize telemetry initialized successfully")
+        else:
+            print("[SKIP] Arize telemetry not available")
+    except Exception as e:
+        print(f"[SKIP] Failed to initialize Arize telemetry: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Flush telemetry data on shutdown"""
+    try:
+        from arize_telemetry import flush_telemetry
+        flush_telemetry()
+        print("[OK] Telemetry data flushed")
+    except Exception as e:
+        print(f"Telemetry flush skipped: {e}")
+
+
 # Request/Response models
 class QueryRequest(BaseModel):
     query: str

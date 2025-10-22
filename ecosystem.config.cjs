@@ -1,10 +1,10 @@
 module.exports = {
   apps: [
     {
-      name: 'service23',
+      name: 'service23_data_analyst',
       script: 'api_server.py',
-      interpreter: '.venv/bin/python',
-      cwd: '/opt/service23',
+      interpreter: '.venv/Scripts/python.exe',
+      cwd: __dirname,
       env: {
         PORT: 8023,
         HOST: '0.0.0.0',

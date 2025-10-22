@@ -22,3 +22,8 @@ mindsdb-sdk==2.0.0
 
 # Logging and utilities
 python-decouple==3.8
+
+# Arize Telemetry & OpenTelemetry
+arize>=7.0.0
+openinference-instrumentation-litellm>=0.1.0
+openinference-instrumentation-openai>=0.1.0
