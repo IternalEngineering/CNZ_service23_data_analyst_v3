@@ -230,6 +230,7 @@ When analyzing data, provide clear insights and actionable recommendations."""
                     # Execute appropriate tool
                     if tool_call.function.name == "query_mindsdb":
                         result = await execute_mindsdb_tool(**arguments)
+                        result_str = str(result)
                     elif tool_call.function.name == "query_postgres_direct":
                         result = await execute_postgres_direct_tool(**arguments)
                         print(f"Direct PostgreSQL Result: {result.get('success', False)}")
